@@ -4,12 +4,16 @@ export ARCH=arm64
 export PROJECT_NAME=a52xq
 mkdir out
 
-BUILD_CROSS_COMPILE=$(pwd)/toolchain/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
-KERNEL_LLVM_BIN=$(pwd)/toolchain/llvm-arm-toolchain-ship/10.0/bin/clang
-CLANG_TRIPLE=aarch64-linux-gnu-
+export CROSS_COMPILE=$(pwd)/toolchain/toolchains-gcc-10.3.0/bin/aarch64-buildroot-linux-gnu-
+export CC=$(pwd)/toolchain/clang/host/linux-x86/clang-r383902/bin/clang
+export CLANG_TRIPLE=aarch64-linux-gnu-
 KERNEL_MAKE_ENV="DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y"
 
-make -j64 -C $(pwd) O=$(pwd)/out $KERNEL_MAKE_ENV ARCH=arm64 CROSS_COMPILE=$BUILD_CROSS_COMPILE REAL_CC=$KERNEL_LLVM_BIN CLANG_TRIPLE=$CLANG_TRIPLE CONFIG_SECTION_MISMATCH_WARN_ONLY=y vendor/a52xq_eur_open_defconfig
-make -j64 -C $(pwd) O=$(pwd)/out $KERNEL_MAKE_ENV ARCH=arm64 CROSS_COMPILE=$BUILD_CROSS_COMPILE REAL_CC=$KERNEL_LLVM_BIN CLANG_TRIPLE=$CLANG_TRIPLE CONFIG_SECTION_MISMATCH_WARN_ONLY=y
- 
+export KCFLAGS=-w
+export CONFIG_SECTION_MISMATCH_WARN_ONLY=y
+export CONFIG_DRV_BUILD_IN=Y
+make -C $(pwd) O=$(pwd)/out $KERNEL_MAKE_ENV KCFLAGS=-w CONFIG_SECTION_MISMATCH_WARN_ONLY=y a52xq_defconfig
+make -C $(pwd) O=$(pwd)/out $KERNEL_MAKE_ENV KCFLAGS=-w CONFIG_SECTION_MISMATCH_WARN_ONLY=y -j16
+
+
 cp out/arch/arm64/boot/Image $(pwd)/arch/arm64/boot/Image
