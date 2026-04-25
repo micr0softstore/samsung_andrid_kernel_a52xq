@@ -3446,7 +3446,6 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
 	    umin_ptr = ptr_reg->umin_value, umax_ptr = ptr_reg->umax_value;
 	u32 dst = insn->dst_reg, src = insn->src_reg;
 	u8 opcode = BPF_OP(insn->code);
-	u32 dst = insn->dst_reg, src = insn->src_reg;
 	int ret;
 
 	dst_reg = &regs[dst];
@@ -5755,18 +5754,18 @@ static bool refsafe(struct bpf_func_state *old, struct bpf_func_state *cur)
 static bool func_states_equal(struct bpf_verifier_env *env, struct bpf_func_state *old,
 								struct bpf_func_state *cur)
 {
-	struct idpair *idmap;
+	struct idpair idmap[ID_MAP_SIZE];
 	bool ret = false;
 	int i;
 
-	memset(env->idmap_scratch, 0, sizeof(env->idmap_scratch));
+	memset(idmap, 0, sizeof(idmap));
 	for (i = 0; i < MAX_BPF_REG; i++)
-	if (!regsafe(env, &old->regs[i], &cur->regs[i],
-	env->idmap_scratch))
-	return false;
+	if (!regsafe(&old->regs[i], &cur->regs[i],
+		     idmap))
+		return false;
 
-	if (!stacksafe(env, old, cur, env->idmap_scratch))
-	return false;
+	if (!stacksafe(old, cur, idmap))
+		return false;
 
 	if (!refsafe(old, cur))
 	return false;
@@ -5802,7 +5801,7 @@ static bool states_equal(struct bpf_verifier_env *env,
 	for (i = 0; i <= old->curframe; i++) {
 		if (old->frame[i]->callsite != cur->frame[i]->callsite)
 			return false;
-		if (!func_states_equal(old->frame[i], cur->frame[i]))
+		if (!func_states_equal(env, old->frame[i], cur->frame[i]))
 			return false;
 	}
 	return true;
