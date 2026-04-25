@@ -122,7 +122,6 @@ struct bpf_reference_state {
  */
 struct bpf_func_state {
 	struct bpf_reg_state regs[MAX_BPF_REG];
-	struct bpf_verifier_state *parent;
 	/* index of call instruction that called into this func */
 	int callsite;
 	/* stack frame number of this function state from pov of
