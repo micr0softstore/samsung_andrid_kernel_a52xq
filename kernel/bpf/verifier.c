@@ -1126,6 +1126,9 @@ static int mark_reg_read(struct bpf_verifier_env *env,
 		/* if read wasn't screened by an earlier write ... */
 		if (writes && state->frame[state->curframe]->regs[regno].live & REG_LIVE_WRITTEN)
 			break;
+		/* stop traversal if already fully propagated upward */
+        if (parent->frame[parent->curframe]->regs[regno].live & REG_LIVE_DONE)
+            break;
 		parent = skip_callee(env, state, parent, regno);
 		if (!parent)
 			return -EFAULT;
@@ -1347,6 +1350,9 @@ static void mark_stack_slot_read(struct bpf_verifier_env *env,
 		/* if read wasn't screened by an earlier write ... */
 		if (writes && state->frame[frameno]->stack[slot].spilled_ptr.live & REG_LIVE_WRITTEN)
 			break;
+		/* stop traversal if already fully propagated */
+        if (parent->frame[frameno]->stack[slot].spilled_ptr.live & REG_LIVE_DONE)
+            break;
 		/* ... then we depend on parent's value */
 		parent->frame[frameno]->stack[slot].spilled_ptr.live |= REG_LIVE_READ;
 		state = parent;
@@ -5542,8 +5548,8 @@ static bool check_ids(u32 old_id, u32 cur_id, struct idpair *idmap)
 }
 
 /* Returns true if (rold safe implies rcur safe) */
-static bool regsafe(struct bpf_reg_state *rold, struct bpf_reg_state *rcur,
-		    struct idpair *idmap)
+static bool regsafe(struct bpf_verifier_env *env, struct bpf_reg_state *rold, struct bpf_reg_state *rcur,
+		    struct bpf_id_pair *idmap)
 {
 	bool equal;
 
@@ -5655,9 +5661,9 @@ static bool regsafe(struct bpf_reg_state *rold, struct bpf_reg_state *rcur,
 	return false;
 }
 
-static bool stacksafe(struct bpf_func_state *old,
-		      struct bpf_func_state *cur,
-		      struct idpair *idmap)
+
+static bool stacksafe(struct bpf_verifier_env *env, struct bpf_func_state *old,
+		      struct bpf_func_state *cur, struct bpf_id_pair *idmap)
 {
 	int i, spi;
 
@@ -5699,9 +5705,8 @@ static bool stacksafe(struct bpf_func_state *old,
 			continue;
 		if (old->stack[spi].slot_type[0] != STACK_SPILL)
 			continue;
-		if (!regsafe(&old->stack[spi].spilled_ptr,
-			     &cur->stack[spi].spilled_ptr,
-			     idmap))
+		if (!regsafe(env, &old->stack[spi].spilled_ptr,
+			     &cur->stack[spi].spilled_ptr, idmap))
 			/* when explored and current stack slot are both storing
 			 * spilled registers, check that stored pointers types
 			 * are the same as well.
@@ -5724,6 +5729,7 @@ static bool refsafe(struct bpf_func_state *old, struct bpf_func_state *cur)
 	return !memcmp(old->refs, cur->refs,
 		       sizeof(*old->refs) * old->acquired_refs);
 }
+
 
 /* compare two verifier states
  *
@@ -5754,33 +5760,21 @@ static bool refsafe(struct bpf_func_state *old, struct bpf_func_state *cur)
 static bool func_states_equal(struct bpf_verifier_env *env, struct bpf_func_state *old,
 								struct bpf_func_state *cur)
 {
-	struct idpair idmap[ID_MAP_SIZE];
-	bool ret = false;
 	int i;
 
-	memset(idmap, 0, sizeof(idmap));
+	memset(env->idmap_scratch, 0, sizeof(env->idmap_scratch));
 	for (i = 0; i < MAX_BPF_REG; i++)
-	if (!regsafe(&old->regs[i], &cur->regs[i],
-		     idmap))
-		return false;
+	if (!regsafe(env, &old->regs[i], &cur->regs[i],
+	env->idmap_scratch))
+	return false;
 
-	if (!stacksafe(old, cur, idmap))
-		return false;
+	if (!stacksafe(env, old, cur, env->idmap_scratch))
+	return false;
 
 	if (!refsafe(old, cur))
 	return false;
 
-	for (i = 0; i < MAX_BPF_REG; i++) {
-		if (!regsafe(&old->regs[i], &cur->regs[i], idmap))
-			goto out_free;
-	}
-
-	if (!stacksafe(old, cur, idmap))
-		goto out_free;
-	ret = true;
-out_free:
-	kfree(idmap);
-	return ret;
+	return true;
 }
 
 static bool states_equal(struct bpf_verifier_env *env,
