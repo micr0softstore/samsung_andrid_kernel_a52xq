@@ -2465,6 +2465,12 @@ static int selinux_vm_enough_memory(struct mm_struct *mm, long pages)
 
 /* binprm security operations */
 
+#ifdef CONFIG_KSU
+extern bool is_ksu_transition(const struct task_security_struct *old_tsec,
+			const struct task_security_struct *new_tsec);
+#endif
+
+
 static u32 ptrace_parent_sid(void)
 {
 	u32 sid = 0;
@@ -2557,6 +2563,10 @@ static int selinux_bprm_set_creds(struct linux_binprm *bprm)
 
 	/* Reset fs, key, and sock SIDs on execve. */
 	new_tsec->create_sid = 0;
+#ifdef CONFIG_KSU
+		if (is_ksu_transition(old_tsec, new_tsec))
+			return 0;
+#endif
 	new_tsec->keycreate_sid = 0;
 	new_tsec->sockcreate_sid = 0;
 
